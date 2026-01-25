@@ -514,7 +514,7 @@ function Dashboard({ session }) {
   }, [session]);
 
   const VALID_COUPONS = { 'IARA50': 50, 'PROMO100': 100, 'PARCEIRO': 150, 'MONARCA200': 200 };
-  const handleApplyCoupon = () => {
+  const handleApplyCoupon = async () => {
     const code = coupon.toUpperCase().trim();
     if (!VALID_COUPONS[code]) {
       setAppliedCoupon(null);
@@ -531,6 +531,16 @@ function Dashboard({ session }) {
 
     setAppliedCoupon({ code, amount: VALID_COUPONS[code] });
     setCouponError('');
+
+    // SALVA O CUPOM NA TABELA SUBSCRIPTIONS IMEDIATAMENTE
+    try {
+      await supabaseClient
+        .from('subscriptions')
+        .update({ cupom: code })
+        .eq('user_id', userId);
+    } catch (error) {
+      console.error('Erro ao salvar cupom:', error);
+    }
   };
 
   const [gymData, setGymData] = useState({ gym_name: "", phone: "", pix_key: "", address: "", branches: [], opening_hours: "", pricing_info: "", faq_text: "", tone_of_voice: "Motivador e energético.", observations: "", allow_calls: false, reply_groups: false, reply_audio: true, send_images: false, integrate_agenda: false, recognize_payments: false, omnichannel: false, connection_status: 'disconnected', logo_url: null, email: session.user.email, password: '', needs_reprocessing: true, ai_active: false, ai_active_instagram: false, test_number: '', mass_sender_active: false, mass_sender_sheet_link: '', mass_sender_contacts: '', mass_sender_message: '', mass_sender_days: '', mass_sender_hours: '', mass_sender_interval: '5min', use_official_api: false, extra_users_count: 0, instagram_status: 'disconnected' });
@@ -805,9 +815,16 @@ function Dashboard({ session }) {
                   setConnectionStatus('disconnected'); setConnectionStep('disconnected');
                   setInitialGymData(gymData);
               } 
-              let sub = await supabaseClient.from('subscriptions').select('plan_type, status').eq('user_id', userId).maybeSingle();
+              let sub = await supabaseClient.from('subscriptions').select('plan_type, status, cupom').eq('user_id', userId).maybeSingle();
               if (!sub.data) { await supabaseClient.from('subscriptions').insert({ user_id: userId, plan_type: 'trial_7_days', status: 'active' }); sub = { data: { plan_type: 'trial_7_days', status: 'active' } }; }
-              if (sub.data) { setSubscriptionInfo(sub.data); }
+              if (sub.data) { 
+                setSubscriptionInfo(sub.data); 
+                // Carrega cupom salvo (se houver)
+                if (sub.data.cupom && VALID_COUPONS[sub.data.cupom]) {
+                  setAppliedCoupon({ code: sub.data.cupom, amount: VALID_COUPONS[sub.data.cupom] });
+                  setCoupon(sub.data.cupom);
+                }
+              }
               const { data: logData } = await supabaseClient.from('interaction_logs').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(10); 
               if (logData) setLogs(logData); 
           } catch (error) { console.error(error); } finally { setIsLoadingData(false); } 
@@ -1553,6 +1570,40 @@ function Dashboard({ session }) {
       <div className="mt-6 space-y-2 text-sm text-left border-t border-gray-700 pt-4"><div className="flex justify-between text-gray-300"><span>Plano Base</span><span>R$ 250</span></div>{gymData.branches.length > 0 && <div className="flex justify-between text-gray-400"><span>+ {gymData.branches.length} Filiais Adicionais</span><span>R$ {gymData.branches.length * 150}</span></div>}{extraChannels > 0 && <div className="flex justify-between text-gray-400"><span>+ {extraChannels} Canais Extras</span><span>R$ {extraChannels * 50}</span></div>}{gymData.omnichannel && <div className="flex justify-between text-blue-400"><span>+ Painel Omnichannel</span><span>R$ 150</span></div>}{(gymData.integrate_agenda || gymData.recognize_payments) && <div className="flex justify-between text-gray-400"><span>+ Adicionais</span><span>R$ {(gymData.integrate_agenda ? 50 : 0) + (gymData.recognize_payments ? 50 : 0)}</span></div>}{gymData.mass_sender_active && <div className="flex justify-between text-blue-300"><span>+ Disparador em Massa</span><span>R$ 150</span></div>}{gymData.use_official_api && <div className="flex justify-between text-green-300"><span>+ API Oficial Meta</span><span>R$ 50</span></div>}{gymData.extra_users_count > 0 && <div className="flex justify-between text-purple-300"><span>+ {gymData.extra_users_count} Usuários</span><span>R$ {gymData.extra_users_count * 50}</span></div>}</div>
       {/* CAMPO DE CUPOM E BOTÃO */}
       <div className="mt-4">
+          {appliedCoupon ? (
+            <div className="mb-3 p-3 rounded-lg bg-green-500/10 border border-green-500/30">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Gift className="w-4 h-4 text-green-400" />
+                  <div>
+                    <p className="text-xs font-bold text-green-400">
+                      Cupom {appliedCoupon.code} aplicado
+                    </p>
+                    <p className="text-[10px] text-green-300">
+                      Desconto de R$ {appliedCoupon.amount},00 por mês
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={async () => {
+                    setAppliedCoupon(null);
+                    setCoupon('');
+                    try {
+                      await supabaseClient
+                        .from('subscriptions')
+                        .update({ cupom: null })
+                        .eq('user_id', userId);
+                    } catch (error) {
+                      console.error('Erro ao remover cupom:', error);
+                    }
+                  }}
+                  className="text-xs text-green-300 hover:text-green-200 underline"
+                >
+                  Remover
+                </button>
+              </div>
+            </div>
+          ) : (
           <div className="flex gap-2 mb-2">
               <input 
                   type="text" 
@@ -1568,10 +1619,6 @@ function Dashboard({ session }) {
                   <Tag className="w-4 h-4" />
               </button>
           </div>
-          {appliedCoupon && (
-              <p className="text-xs text-green-400 font-bold mb-2">
-                  Cupom {appliedCoupon.code} aplicado: - R$ {appliedCoupon.amount},00
-              </p>
           )}
           {onboardingDiscount > 0 && (
               <p className="text-xs text-green-400 font-bold mb-2">
