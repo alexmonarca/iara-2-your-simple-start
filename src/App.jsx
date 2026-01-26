@@ -96,8 +96,8 @@ const calculateSubtotal = (data, extraChannels, extraUsers) => {
 const calculateTotal = (data, extraChannels, extraUsers, couponDiscount = 0, onboardingDiscount = 0) => {
     const subtotal = calculateSubtotal(data, extraChannels, extraUsers);
 
-    // Cupom só funciona para contratações acima de R$ 250 (isto é, com adicionais)
-    const eligibleCouponDiscount = subtotal > 250 ? (couponDiscount || 0) : 0;
+    // Cupom só funciona para contratações de R$ 250 ou superior (isto é, com adicionais)
+    const eligibleCouponDiscount = subtotal >= 250 ? (couponDiscount || 0) : 0;
 
     // Aplica descontos
     const totalDiscount = eligibleCouponDiscount + (onboardingDiscount || 0);
@@ -523,9 +523,9 @@ function Dashboard({ session }) {
     }
 
     const subtotal = calculateSubtotal(gymData, extraChannels, gymData?.extra_users_count);
-    if (subtotal <= 250) {
+    if (subtotal < 250) {
       setAppliedCoupon(null);
-      setCouponError('Cupom válido apenas para contratações acima de R$ 250. Adicione um adicional para aplicar.');
+      setCouponError('Cupom válido apenas para contratações de R$ 250 ou superior. Adicione um adicional para aplicar.');
       return;
     }
 
