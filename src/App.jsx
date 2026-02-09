@@ -1039,6 +1039,25 @@ function Dashboard({ session }) {
       ? getPlanNameByPrice(totalPrice, subscriptionInfo.plan_type)
       : 'Trial Grátis';
 
+  // Tier normalizado (Trial / Start / Premium)
+  const planTier = (() => {
+    const p = String(displayPlanName || "").toLowerCase();
+    if (p.includes("premium") || p.includes("enterprise")) return "premium";
+    if (p.includes("start") || p.includes("base")) return "start";
+    return "trial";
+  })();
+
+  // “Responder áudio?”: disponível apenas para quem investe acima do Start (Premium+)
+  const lockReplyAudio = planTier !== "premium";
+
+  // Garante que Trial/Start fiquem DESATIVADOS por padrão (mesmo se vier true do banco)
+  useEffect(() => {
+    if (!lockReplyAudio) return;
+    if (!gymData?.reply_audio) return;
+    setGymData((prev) => ({ ...prev, reply_audio: false }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lockReplyAudio]);
+
   // Retenção (disparos em massa): liberar somente para Plano Start ou superior (>= R$300/mês).
   // Calcula SEM o próprio adicional de retenção para evitar liberar marcando o checkbox.
   const basePriceWithoutRetention = calculateTotal(
@@ -1384,8 +1403,8 @@ function Dashboard({ session }) {
                     subLabel="IA ouve áudio e responde também em áudio. Se desativado sempre responderá em texto."
                     checked={gymData.reply_audio}
                     onChange={(val) => setGymData({ ...gymData, reply_audio: val })}
-                    disabled={subscriptionInfo?.plan_type === 'trial_7_days'}
-                    locked={subscriptionInfo?.plan_type === 'trial_7_days'}
+                    disabled={lockReplyAudio}
+                    locked={lockReplyAudio}
                     onLockedClick={() => setActiveTab('plans')}
                   />
                   <CheckboxGroup
